@@ -19,7 +19,7 @@ const getResend = () => {
 // From address
 const FROM_ADDRESS = () =>
   `${process.env.APP_NAME || 'CoinSquare Wealth'} <${
-    process.env.EMAIL_FROM || 'onboarding@resend.dev'
+    process.env.FROM_EMAIL || 'onboarding@resend.dev'
   }>`;
 
 // ─────────────────────────────────────────────────────────────
