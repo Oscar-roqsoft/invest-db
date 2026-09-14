@@ -20,6 +20,11 @@ const investmentRoutes = require("./api/v1/routes/investment");
 const transactionRoutes = require("./api/v1/routes/transaction");
 const referralRoutes = require("./api/v1/routes/referral");
 const adminRoutes = require("./api/v1/routes/admin");
+const userRoutes = require("./api/v1/routes/user");
+
+
+const uploadRoutes = require("./api/v1/routes/uploadRoute");
+
 
 // Middlewares
 const notFound = require('./middlewares/not-found');
@@ -59,10 +64,10 @@ app.use(cors({
 // }));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // ─────────────────────────────────────────────────────────────
 // ROUTES (v1)
 // ─────────────────────────────────────────────────────────────
+app.use("/api/v1/upload", uploadRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/deposit", depositRoutes);
@@ -71,6 +76,7 @@ app.use("/api/v1/investment", investmentRoutes);
 app.use("/api/v1/transaction", transactionRoutes);
 app.use("/api/v1/referral", referralRoutes);
 app.use("/api/v1/admin", adminRoutes);
+app.use("/api/v1/user", userRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

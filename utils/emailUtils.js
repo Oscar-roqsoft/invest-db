@@ -232,6 +232,46 @@ const sendTransactionEmail = async (user, { type, amount, crypto, status, refere
   }
 };
 
+// utils/emailUtils.js — ADD
+
+const sendKycApprovedEmail = async (user) => {
+  const body = `
+    <p>Hi ${user.name},</p>
+    <p>Great news! Your identity verification has been <strong style="color:#10b981;">approved</strong>.</p>
+    <p>You now have full access to:</p>
+    <ul>
+      <li>Higher withdrawal limits</li>
+      <li>Advanced trading features</li>
+      <li>Priority customer support</li>
+    </ul>
+  `;
+
+  await sendEmail({
+    to: user.email,
+    subject: 'Identity Verified ✅ - CoinSquare Wealth',
+    html: emailTemplate('Your Account is Fully Verified', body, 'Go to Dashboard', `${process.env.APP_URL}/dashboard`),
+  });
+};
+
+const sendKycRejectedEmail = async (user, reason) => {
+  const body = `
+    <p>Hi ${user.name},</p>
+    <p>Unfortunately, your identity verification was <strong style="color:#ef4444;">not approved</strong>.</p>
+    <div class="otp-box" style="text-align:left;">
+      <p style="margin:0;"><strong>Reason:</strong> ${reason}</p>
+    </div>
+    <p>You can re-submit your documents with the corrections above.</p>
+  `;
+
+  await sendEmail({
+    to: user.email,
+    subject: 'Identity Verification Update - CoinSquare Wealth',
+    html: emailTemplate('Verification Not Approved', body, 'Try Again', `${process.env.APP_URL}/dashboard/settings?tab=verification`),
+  });
+};
+
+
+
 // ─────────────────────────────────────────────────────────────
 // EXPORTS
 // ─────────────────────────────────────────────────────────────
@@ -241,4 +281,6 @@ module.exports = {
   sendWelcomeEmail,
   sendPasswordResetEmail,
   sendTransactionEmail,
+  sendKycApprovedEmail,
+  sendKycRejectedEmail,
 };
