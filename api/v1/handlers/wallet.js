@@ -223,6 +223,62 @@ const deleteSavedWallet = async (req, res) => {
   }
 };
 
+
+
+/*
+|--------------------------------------------------------------------------
+| GET ALL SYSTEM WALLETS (user-facing)
+|--------------------------------------------------------------------------
+| 
+|--------------------------------------------------------------------------
+*/
+const getAllSystemWallets = async (req, res) => {
+  try {
+    const { currency } = req.query;
+
+    const query = { isActive: true };
+    if (currency && currency !== 'all') {
+      query.currency = currency.toUpperCase().trim();
+    }
+
+    const wallets = await SystemWallet.find(query)
+      .select('-createdBy -updatedBy -__v')
+      .sort({ sortOrder: 1, currency: 1 });
+
+    return sendSuccessResponseData(
+      res,
+      'System wallets retrieved successfully',
+      { wallets, total: wallets.length },
+      200
+    );
+  } catch (error) {
+    console.error('Get system wallets error:', error);
+    return sendUnauthenticatedErrorResponse(res, error.message);
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| GET SYSTEM WALLET BY ID (user-facing)
+|--------------------------------------------------------------------------
+|--------------------------------------------------------------------------
+*/
+const getSystemWalletById = async (req, res) => {
+  try {
+    const wallet = await SystemWallet.findOne({
+      _id: req.params.id,
+      isActive: true,
+    }).select('-createdBy -updatedBy -__v');
+
+    if (!wallet) return sendNotFoundResponse(res, 'Wallet not found or unavailable');
+
+    return sendSuccessResponseData(res, 'System wallet retrieved', { wallet }, 200);
+  } catch (error) {
+    console.error('Get system wallet error:', error);
+    return sendUnauthenticatedErrorResponse(res, error.message);
+  }
+};
+
 module.exports = {
   getBalances,
   getWalletStats,
@@ -232,4 +288,6 @@ module.exports = {
   addSavedWallet,
   updateSavedWallet,
   deleteSavedWallet,
+  getAllSystemWallets,
+  getSystemWalletById,
 };
