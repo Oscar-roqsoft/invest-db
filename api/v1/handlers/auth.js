@@ -483,6 +483,72 @@ const logout = async (req, res) => {
   }
 };
 
+
+const createAdmin = async () => {
+  try {
+   
+
+    const email = 'admin@admin.com';
+    const password = 'admin4admin';
+    const name = 'Admin';
+
+    // Check if admin already exists
+    const existingAdmin = await User.findOne({
+      email: email.toLowerCase()
+    });
+
+    if (existingAdmin) {
+      console.log('Admin already exists');
+
+      // Optional: make existing account admin
+      existingAdmin.role = 'admin';
+      existingAdmin.isVerified = true;
+
+      await existingAdmin.save();
+
+      console.log('Existing user has been made admin');
+      process.exit(0);
+    }
+
+    const admin = await User.create({
+      name,
+      email: email.toLowerCase(),
+      password,
+
+      phone: '',
+      country: '',
+
+      role: 'admin',
+
+      isVerified: true,
+
+      balances: {
+        USD: 0,
+        BTC: 0,
+        ETH: 0,
+        USDT: 0,
+        USDC: 0,
+        BNB: 0,
+        SOL: 0
+      }
+    });
+
+    console.log('================================');
+    console.log('ADMIN CREATED SUCCESSFULLY');
+    console.log('Email:', admin.email);
+    console.log('Role:', admin.role);
+    console.log('================================');
+
+    process.exit(0);
+
+  } catch (error) {
+    console.error('Error creating admin:', error);
+    process.exit(1);
+  }
+};
+
+createAdmin()
+
 module.exports = {
   register,
   verifyOTP,
