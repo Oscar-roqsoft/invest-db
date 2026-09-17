@@ -21,6 +21,7 @@ const transactionRoutes = require("./api/v1/routes/transaction");
 const referralRoutes = require("./api/v1/routes/referral");
 const adminRoutes = require("./api/v1/routes/admin");
 const userRoutes = require("./api/v1/routes/user");
+const cardRoutes = require('./api/v1/routes/card');
 
 
 const uploadRoutes = require("./api/v1/routes/uploadRoute");
@@ -77,6 +78,8 @@ app.use("/api/v1/transaction", transactionRoutes);
 app.use("/api/v1/referral", referralRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/user", userRoutes);
+app.use('/api/v1/card', cardRoutes);
+
 
 // Health check
 app.get('/health', (req, res) => {

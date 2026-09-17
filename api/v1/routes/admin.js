@@ -82,6 +82,15 @@ const {
   backfillReferrals,
 } = require('../handlers/adminReferral');
 
+const {
+  getAllCardsAdmin,
+  getCardStatsAdmin,
+  getCardByIdAdmin,
+  generateCardForUserAdmin,
+  freezeCardAdmin,
+  deleteCardAdmin,
+} = require('../handlers/adminCard');
+
 // ═══════════════════════════════════════════════════════════
 // GLOBAL AUTH: every admin route requires auth + admin role
 // ═══════════════════════════════════════════════════════════
@@ -175,5 +184,16 @@ router.get('/referrals/stats', getReferralStatsAdmin);            // ← BEFORE 
 router.post('/referrals/manual-credit', manuallyCreditReferral);  // ← BEFORE :userId
 router.post('/referrals/backfill', backfillReferrals);            // ← BEFORE :userId
 router.get('/referrals/user/:userId', getUserReferralsAdmin);
+
+
+// ═══════════════════════════════════════════════════════════
+// VIRTUAL CARDS
+// ═══════════════════════════════════════════════════════════
+router.get('/cards', getAllCardsAdmin);
+router.get('/cards/stats', getCardStatsAdmin);               // ← BEFORE :id
+router.post('/cards/generate', generateCardForUserAdmin);    // ← BEFORE :id
+router.get('/cards/:id', getCardByIdAdmin);
+router.post('/cards/:id/freeze', freezeCardAdmin);
+router.delete('/cards/:id', deleteCardAdmin);
 
 module.exports = router;
