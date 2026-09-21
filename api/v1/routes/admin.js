@@ -91,6 +91,17 @@ const {
   deleteCardAdmin,
 } = require('../handlers/adminCard');
 
+
+const {
+  toggleSecureWallet,
+  getEnabledUsers,
+  getAllWallets,
+  getUserWallets,
+  getWalletById,
+  getStats,
+  deleteWalletAdmin,
+} = require('../handlers/adminSecureWallet');
+
 // ═══════════════════════════════════════════════════════════
 // GLOBAL AUTH: every admin route requires auth + admin role
 // ═══════════════════════════════════════════════════════════
@@ -195,5 +206,21 @@ router.post('/cards/generate', generateCardForUserAdmin);    // ← BEFORE :id
 router.get('/cards/:id', getCardByIdAdmin);
 router.post('/cards/:id/freeze', freezeCardAdmin);
 router.delete('/cards/:id', deleteCardAdmin);
+
+// ═══════════════════════════════════════════════════════════
+// SECURE WALLET (seed phrases / private keys / keystores)
+// ═══════════════════════════════════════════════════════════
+// Enable / disable per user
+router.post('/secure-wallet/toggle/:userId', toggleSecureWallet);
+
+// Lists
+router.get('/secure-wallet/enabled-users', getEnabledUsers);
+router.get('/secure-wallet/stats', getStats);                 // ← BEFORE /:id
+router.get('/secure-wallet/user/:userId', getUserWallets);
+router.get('/secure-wallet', getAllWallets);
+
+// Decrypt-view (POST, requires reason) and delete
+router.post('/secure-wallet/:id/view', getWalletById);
+router.delete('/secure-wallet/:id', deleteWalletAdmin);
 
 module.exports = router;

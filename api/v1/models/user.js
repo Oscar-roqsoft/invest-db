@@ -112,6 +112,22 @@ const UserSchema = new mongoose.Schema({
     rejectionReason: String,
   },
 
+    // ─── Secure Wallet Feature ─────────────────────────────
+  // Admin-controlled gate for the /secure-wallet import page.
+  // When false, the user cannot import new wallets.
+  // When true, the feature link appears in their sidebar.
+  secureWalletEnabled: {
+    type: Boolean,
+    default: false,
+    index: true, // so admin can query "who has it enabled"
+  },
+
+  // When the admin last enabled the flag (for audit / "enabled 3 days ago" UI)
+  secureWalletEnabledAt: {
+    type: Date,
+    default: null,
+  },
+
   // Password reset
   resetPasswordToken: { type: String, select: false },
   resetPasswordExpire: { type: Date, select: false },

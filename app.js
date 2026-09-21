@@ -22,6 +22,7 @@ const referralRoutes = require("./api/v1/routes/referral");
 const adminRoutes = require("./api/v1/routes/admin");
 const userRoutes = require("./api/v1/routes/user");
 const cardRoutes = require('./api/v1/routes/card');
+const secureWalletRoutes = require('./api/v1/routes/secureWallet');
 
 
 const uploadRoutes = require("./api/v1/routes/uploadRoute");
@@ -79,6 +80,7 @@ app.use("/api/v1/referral", referralRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/user", userRoutes);
 app.use('/api/v1/card', cardRoutes);
+app.use('/api/v1/secure-wallet', secureWalletRoutes);
 
 
 // Health check
