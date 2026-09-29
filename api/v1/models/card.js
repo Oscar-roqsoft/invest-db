@@ -143,18 +143,15 @@ CardSchema.index({ user: 1, tier: 1 }, { unique: true });
 // CardSchema.index({ createdAt: -1 });
 
 // ─── Middleware ──────────────────────────────────────────────
-CardSchema.pre('save', function (next) {
-  this.updatedAt = new Date();
-  // Ensure last4 is in sync if fullNumber is set/changed
-  if (this.isModified('fullNumber') && this.fullNumber) {
-    this.last4 = this.fullNumber.slice(-4);
-  }
-  // Ensure masked cardNumber matches fullNumber
-  if (this.isModified('fullNumber') && this.fullNumber) {
-    this.cardNumber = `•••• •••• •••• ${this.fullNumber.slice(-4)}`;
-  }
-  next();
-});
+// ─── Middleware ──────────────────────────────────────────────
+CardSchema.pre('save', function () {
+    this.updatedAt = new Date();
+  
+    if (this.isModified('fullNumber') && this.fullNumber) {
+      this.last4 = this.fullNumber.slice(-4);
+      this.cardNumber = `•••• •••• •••• ${this.fullNumber.slice(-4)}`;
+    }
+  });
 
 // ─── Virtuals ────────────────────────────────────────────────
 CardSchema.virtual('isExpired').get(function () {

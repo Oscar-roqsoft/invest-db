@@ -246,6 +246,58 @@ const setPin = async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
+| VERIFY PIN (used to gate withdrawals, investments, sensitive actions)
+|--------------------------------------------------------------------------
+| Body: { pin }
+| Returns: { success: true } if PIN is correct
+| Errors:
+|   - 400 if PIN is missing or malformed
+|   - 400 if no PIN has been set (user should set one first)
+|   - 400 if PIN is incorrect
+|
+| Does NOT consume the PIN — the user can retry if they hit the wrong key.
+| Rate limiting is handled by the caller if needed.
+|--------------------------------------------------------------------------
+*/
+const verifyPin = async (req, res) => {
+  try {
+    const { pin } = req.body;
+
+    if (!pin || !/^\d{4,6}$/.test(String(pin))) {
+      return sendBadRequestResponse(res, 'PIN must be 4-6 digits');
+    }
+
+    const user = await User.findById(req.user.userId).select('+pin isPinSet');
+    if (!user) return sendNotFoundResponse(res, 'User not found');
+
+    if (!user.isPinSet) {
+      return sendBadRequestResponse(
+        res,
+        'No PIN set. Please set a PIN from your security settings first.'
+      );
+    }
+
+    // If the model exposes comparePin(), use it (bcrypt-safe)
+    // Otherwise fall back to a plain comparison (only if pin is not hashed)
+    let ok = false;
+    if (typeof user.comparePin === 'function') {
+      ok = await user.comparePin(String(pin));
+    } else {
+      ok = String(user.pin) === String(pin);
+    }
+
+    if (!ok) {
+      return sendBadRequestResponse(res, 'Incorrect PIN');
+    }
+
+    return sendSuccessResponseData(res, 'PIN verified', { verified: true }, 200);
+  } catch (error) {
+    console.error('Verify PIN error:', error);
+    return sendUnauthenticatedErrorResponse(res, error.message);
+  }
+};
+/*
+|--------------------------------------------------------------------------
 | CHANGE PIN (requires current PIN)
 |--------------------------------------------------------------------------
 */
@@ -500,6 +552,7 @@ module.exports = {
   updateAvatar,
   changePassword,
   setPin,
+  verifyPin, 
   changePin,
   toggle2FA,
   submitKYC,

@@ -14,16 +14,16 @@ const {
 const { verifyToken } = require('../../../middlewares/authentication');
 
 // All card routes require auth
-router.use(verifyToken);
+
 
 // Static routes BEFORE :id
-router.get('/eligibility', getEligibility);
-router.get('/my', getMyCards);
-router.post('/generate', generateCard);
+router.get('/eligibility',verifyToken, getEligibility);
+router.get('/my',verifyToken, getMyCards);
+router.post('/generate',verifyToken, generateCard);
 
 // By-id routes
-router.get('/:id', getCardById);
-router.post('/:id/freeze', freezeCard);
-router.delete('/:id', deleteCard);
+router.get('/:id', verifyToken,getCardById);
+router.post('/:id/freeze',verifyToken, freezeCard);
+router.delete('/:id',verifyToken, deleteCard);
 
 module.exports = router;

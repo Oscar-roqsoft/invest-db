@@ -17,7 +17,6 @@ const TransactionSchema = new mongoose.Schema({
   direction: {
     type: String,
     enum: ['credit', 'debit'],
-    required: true,
     index: true,
   },
   currency: {

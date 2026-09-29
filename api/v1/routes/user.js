@@ -8,6 +8,7 @@ const {
   updateAvatar,
   changePassword,
   setPin,
+  verifyPin,
   changePin,
   toggle2FA,
   submitKYC,
@@ -27,6 +28,7 @@ router.get('/security', verifyToken, getSecurityOverview);
 router.post('/change-password', verifyToken, changePassword);
 router.post('/set-pin', verifyToken, setPin);
 router.post('/change-pin', verifyToken, changePin);
+router.post('/verify-pin', verifyToken, verifyPin);
 router.post('/toggle-2fa', verifyToken, toggle2FA);
 
 // KYC
