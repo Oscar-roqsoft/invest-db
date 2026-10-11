@@ -57,7 +57,7 @@ const encrypt = (plaintext) => {
 
   const ciphertext = Buffer.concat([cipher.update(buf), cipher.final()]);
   const authTag = cipher.getAuthTag();
-
+1
   return [
     VERSION,
     SCHEME,

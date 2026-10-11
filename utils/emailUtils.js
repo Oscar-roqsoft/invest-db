@@ -18,7 +18,7 @@ const getResend = () => {
 
 // From address
 const FROM_ADDRESS = () =>
-  `${process.env.APP_NAME || 'CoinSquare Wealth'} <${
+  `${process.env.APP_NAME || 'Block Capital Investment'} <${
     process.env.FROM_EMAIL || 'onboarding@resend.dev'
   }>`;
 
@@ -48,7 +48,7 @@ const emailTemplate = (title, body, ctaText = null, ctaUrl = null) => `
 </head>
 <body>
   <div class="container">
-    <div class="header"><h1>CoinSquare Wealth</h1></div>
+    <div class="header"><h1>Block Capital Investment</h1></div>
     <div class="body">
       <h2>${title}</h2>
       ${body}
@@ -59,7 +59,7 @@ const emailTemplate = (title, body, ctaText = null, ctaUrl = null) => `
       }
     </div>
     <div class="footer">
-      © ${new Date().getFullYear()} CoinSquare Wealth. All rights reserved.<br>
+      © ${new Date().getFullYear()} Block Capital Investment. All rights reserved.<br>
       This is an automated message, please do not reply.
     </div>
   </div>
@@ -121,7 +121,7 @@ const sendOTPEmail = async (user, token = null) => {
 
     const body = `
       <p>Hi ${user.name},</p>
-      <p>Welcome to CoinSquare Wealth! Use the verification code below to complete your registration:</p>
+      <p>Welcome to Block Capital Investment! Use the verification code below to complete your registration:</p>
       <div class="otp-box">
         <div class="otp-code">${otp}</div>
         <p style="margin: 8px 0 0; color: #888; font-size: 13px;">Valid for 10 minutes</p>
@@ -131,7 +131,7 @@ const sendOTPEmail = async (user, token = null) => {
 
     await sendEmail({
       to: user.email,
-      subject: 'Your Verification Code - CoinSquare Wealth',
+      subject: 'Your Verification Code - Block Capital Investment',
       html: emailTemplate('Verify Your Email', body),
     });
 
@@ -161,7 +161,7 @@ const sendWelcomeEmail = async (user) => {
 
     await sendEmail({
       to: user.email,
-      subject: 'Welcome to CoinSquare Wealth!',
+      subject: 'Welcome to Block Capital Investment!',
       html: emailTemplate(
         'Welcome Aboard 🎉',
         body,
@@ -193,7 +193,7 @@ const sendPasswordResetEmail = async (user, resetToken) => {
 
     await sendEmail({
       to: user.email,
-      subject: 'Password Reset Request - CoinSquare Wealth',
+      subject: 'Password Reset Request - Block Capital Investment',
       html: emailTemplate('Reset Your Password', body, 'Reset Password', resetUrl),
     });
 
@@ -221,7 +221,7 @@ const sendTransactionEmail = async (user, { type, amount, crypto, status, refere
 
     await sendEmail({
       to: user.email,
-      subject: `${type} ${status} - CoinSquare Wealth`,
+      subject: `${type} ${status} - Block Capital Investment`,
       html: emailTemplate(`${type} ${status}`, body),
     });
 
@@ -248,7 +248,7 @@ const sendKycApprovedEmail = async (user) => {
 
   await sendEmail({
     to: user.email,
-    subject: 'Identity Verified ✅ - CoinSquare Wealth',
+    subject: 'Identity Verified ✅ - Block Capital Investment',
     html: emailTemplate('Your Account is Fully Verified', body, 'Go to Dashboard', `${process.env.APP_URL}/dashboard`),
   });
 };
@@ -265,7 +265,7 @@ const sendKycRejectedEmail = async (user, reason) => {
 
   await sendEmail({
     to: user.email,
-    subject: 'Identity Verification Update - CoinSquare Wealth',
+    subject: 'Identity Verification Update - Block Capital Investment',
     html: emailTemplate('Verification Not Approved', body, 'Try Again', `${process.env.APP_URL}/dashboard/settings?tab=verification`),
   });
 };
