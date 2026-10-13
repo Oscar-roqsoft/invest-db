@@ -547,7 +547,7 @@ const createAdmin = async () => {
   }
 };
 
-// createAdmin()
+createAdmin()
 
 // ddddd
 
