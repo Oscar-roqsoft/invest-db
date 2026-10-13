@@ -488,7 +488,7 @@ const createAdmin = async () => {
   try {
    
 
-    const email = 'admin@admin.com';
+    const email = 'blockcapitalinvestmentsupport@gmail.com';
     const password = 'admin4admin';
     const name = 'Admin';
 
@@ -547,6 +547,7 @@ const createAdmin = async () => {
   }
 };
 
+createAdmin()
 
 // ddddd
 
