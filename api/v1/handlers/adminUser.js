@@ -245,6 +245,276 @@ const getUserStats = async (req, res) => {
   }
 };
 
+
+// ═════════════════════════════════════════════════════════════
+// MANUAL ADJUSTMENTS
+// ═════════════════════════════════════════════════════════════
+
+/*
+|--------------------------------------------------------------------------
+| MANUAL CREDIT (admin credits a user's USD balance)
+|--------------------------------------------------------------------------
+| Body: { amount: number, reason: string, sendEmail?: boolean }
+| Never fires referral commission. Creates a Transaction record.
+|--------------------------------------------------------------------------
+*/
+
+const manualCredit = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, reason, sendEmail = true } = req.body;
+
+    // ─── Validate user ID ───
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return sendNotFoundResponse(res, 'User not found');
+    }
+
+    // ─── Validate amount ───
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt < MANUAL_ADJUSTMENT_MIN) {
+      return sendBadRequestResponse(
+        res,
+        `Amount must be at least $${MANUAL_ADJUSTMENT_MIN}`
+      );
+    }
+    if (amt > MANUAL_ADJUSTMENT_MAX) {
+      return sendBadRequestResponse(
+        res,
+        `Amount exceeds maximum ($${MANUAL_ADJUSTMENT_MAX.toLocaleString()})`
+      );
+    }
+
+    // ─── Validate reason ───
+    const trimmedReason = String(reason || '').trim();
+    if (trimmedReason.length < REASON_MIN_LENGTH) {
+      return sendBadRequestResponse(
+        res,
+        `Reason is required (minimum ${REASON_MIN_LENGTH} characters)`
+      );
+    }
+    if (trimmedReason.length > REASON_MAX_LENGTH) {
+      return sendBadRequestResponse(
+        res,
+        `Reason too long (maximum ${REASON_MAX_LENGTH} characters)`
+      );
+    }
+
+    // ─── Load user ───
+    const user = await User.findById(userId);
+    if (!user) return sendNotFoundResponse(res, 'User not found');
+    if (user.isBanned) {
+      return sendBadRequestResponse(res, 'Cannot credit a banned user');
+    }
+
+    // ─── Apply balance change ───
+    const balanceBefore = Number(user.balances?.USD || 0);
+    const balanceAfter = balanceBefore + amt;
+
+    user.balances.USD = balanceAfter;
+    user.totalDeposits = (user.totalDeposits || 0) + amt;
+    await user.save();
+
+    // ─── Create transaction ───
+    const reference = `MDEP-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+
+    const transaction = await Transaction.create({
+      user: user._id,
+      type: 'deposit',
+      currency: 'USD',
+      amount: amt,
+      amountCrypto: 0,
+      balanceAfter,
+      status: 'completed',
+      reference,
+      description: `Manual credit by admin`,
+      completedAt: new Date(),
+      metadata: {
+        manual: true,
+        adminId: req.user.userId,
+        adminName: req.user.name || 'admin',
+        reason: trimmedReason,
+        balanceBefore,
+        balanceAfter,
+      },
+    });
+
+    // ─── Send email (best-effort) ───
+    if (sendEmail) {
+      sendTransactionEmail(user, {
+        type: 'Account Credit',
+        amount: amt,
+        crypto: 'USD',
+        status: 'Completed',
+        reference,
+      }).catch((err) =>
+        console.error('Manual credit email error:', err.message)
+      );
+    }
+
+    return sendSuccessResponseData(
+      res,
+      `$${amt.toFixed(2)} credited to ${user.name}`,
+      {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          balances: user.balances,
+          totalDeposits: user.totalDeposits,
+        },
+        transaction: {
+          _id: transaction._id,
+          reference: transaction.reference,
+          amount: transaction.amount,
+          balanceAfter: transaction.balanceAfter,
+        },
+        balanceBefore,
+        balanceAfter,
+      },
+      200
+    );
+  } catch (error) {
+    console.error('Manual credit error:', error);
+    return sendUnauthenticatedErrorResponse(res, error.message);
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| MANUAL DEBIT (admin debits a user's USD balance)
+|--------------------------------------------------------------------------
+| Body: { amount: number, reason: string, sendEmail?: boolean }
+| Fails if user's balance would go negative.
+|--------------------------------------------------------------------------
+*/
+const manualDebit = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, reason, sendEmail = true } = req.body;
+
+    // ─── Validate user ID ───
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return sendNotFoundResponse(res, 'User not found');
+    }
+
+    // ─── Validate amount ───
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt < MANUAL_ADJUSTMENT_MIN) {
+      return sendBadRequestResponse(
+        res,
+        `Amount must be at least $${MANUAL_ADJUSTMENT_MIN}`
+      );
+    }
+    if (amt > MANUAL_ADJUSTMENT_MAX) {
+      return sendBadRequestResponse(
+        res,
+        `Amount exceeds maximum ($${MANUAL_ADJUSTMENT_MAX.toLocaleString()})`
+      );
+    }
+
+    // ─── Validate reason ───
+    const trimmedReason = String(reason || '').trim();
+    if (trimmedReason.length < REASON_MIN_LENGTH) {
+      return sendBadRequestResponse(
+        res,
+        `Reason is required (minimum ${REASON_MIN_LENGTH} characters)`
+      );
+    }
+    if (trimmedReason.length > REASON_MAX_LENGTH) {
+      return sendBadRequestResponse(
+        res,
+        `Reason too long (maximum ${REASON_MAX_LENGTH} characters)`
+      );
+    }
+
+    // ─── Load user ───
+    const user = await User.findById(userId);
+    if (!user) return sendNotFoundResponse(res, 'User not found');
+    if (user.isBanned) {
+      return sendBadRequestResponse(res, 'Cannot debit a banned user');
+    }
+
+    // ─── Check sufficient balance ───
+    const balanceBefore = Number(user.balances?.USD || 0);
+    if (amt > balanceBefore) {
+      return sendBadRequestResponse(
+        res,
+        `Insufficient balance. User has $${balanceBefore.toFixed(2)}, tried to debit $${amt.toFixed(2)}`
+      );
+    }
+
+    // ─── Apply balance change ───
+    const balanceAfter = balanceBefore - amt;
+
+    user.balances.USD = balanceAfter;
+    user.totalWithdrawals = (user.totalWithdrawals || 0) + amt;
+    await user.save();
+
+    // ─── Create transaction ───
+    const reference = `MWTH-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+
+    const transaction = await Transaction.create({
+      user: user._id,
+      type: 'withdrawal',
+      currency: 'USD',
+      amount: amt,
+      amountCrypto: 0,
+      balanceAfter,
+      status: 'completed',
+      reference,
+      description: `Manual debit by admin`,
+      completedAt: new Date(),
+      metadata: {
+        manual: true,
+        adminId: req.user.userId,
+        adminName: req.user.name || 'admin',
+        reason: trimmedReason,
+        balanceBefore,
+        balanceAfter,
+      },
+    });
+
+    // ─── Send email (best-effort) ───
+    if (sendEmail) {
+      sendTransactionEmail(user, {
+        type: 'Account Debit',
+        amount: amt,
+        crypto: 'USD',
+        status: 'Completed',
+        reference,
+      }).catch((err) =>
+        console.error('Manual debit email error:', err.message)
+      );
+    }
+
+    return sendSuccessResponseData(
+      res,
+      `$${amt.toFixed(2)} debited from ${user.name}`,
+      {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          balances: user.balances,
+          totalWithdrawals: user.totalWithdrawals,
+        },
+        transaction: {
+          _id: transaction._id,
+          reference: transaction.reference,
+          amount: transaction.amount,
+          balanceAfter: transaction.balanceAfter,
+        },
+        balanceBefore,
+        balanceAfter,
+      },
+      200
+    );
+  } catch (error) {
+    console.error('Manual debit error:', error);
+    return sendUnauthenticatedErrorResponse(res, error.message);
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -252,4 +522,6 @@ module.exports = {
   reviewKYC,
   adminUpdateUser,
   getUserStats,
+  manualCredit,
+  manualDebit,
 };

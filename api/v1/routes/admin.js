@@ -12,6 +12,8 @@ const {
   reviewKYC,
   adminUpdateUser,
   getUserStats,
+  manualCredit,
+  manualDebit,
 } = require('../handlers/adminUser');
 
 const {
@@ -116,6 +118,9 @@ router.get('/users/stats', getUserStats);            // ← BEFORE :id
 router.get('/users/:id', getUserById);
 router.put('/users/:id', adminUpdateUser);
 router.post('/users/:id/ban', setBanStatus);
+
+router.post('/users/:userId/manual-credit', manualCredit);
+router.post('/users/:userId/manual-debit', manualDebit);
 
 // ═══════════════════════════════════════════════════════════
 // KYC
