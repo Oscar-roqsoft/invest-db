@@ -343,6 +343,7 @@ const manualCredit = async (req, res) => {
 
     // ─── Convert USD → crypto using live price ───
     let conversion;
+    
     try {
       conversion = await usdToCrypto(amtUSD, currencyUpper);
     } catch (err) {
