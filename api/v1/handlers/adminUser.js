@@ -6,8 +6,17 @@ const {
   sendNotFoundResponse,
   sendUnauthenticatedErrorResponse,
 } = require('../responses');
+const SystemWallet = require('../models/systemWallet');
+const { usdToCrypto } = require('../../../utils/cryptoUtils');
+const mongoose = require('mongoose');
+const Transaction = require('../models/transaction');
 
 // mmm
+
+const MANUAL_ADJUSTMENT_MAX_USD = 1_000_000;
+const MANUAL_ADJUSTMENT_MIN_USD = 0.01;
+const REASON_MIN_LENGTH = 3;
+const REASON_MAX_LENGTH = 500;
 
 /*
 |--------------------------------------------------------------------------
@@ -262,25 +271,37 @@ const getUserStats = async (req, res) => {
 const manualCredit = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { amount, reason, sendEmail = true } = req.body;
+    const {
+      currency,
+      network,
+      amountUSD,
+      reason,
+      sendEmail = true,
+    } = req.body;
 
     // ─── Validate user ID ───
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return sendNotFoundResponse(res, 'User not found');
     }
 
+    // ─── Validate currency ───
+    if (!currency) {
+      return sendBadRequestResponse(res, 'Currency is required');
+    }
+    const currencyUpper = String(currency).toUpperCase().trim();
+
     // ─── Validate amount ───
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt < MANUAL_ADJUSTMENT_MIN) {
+    const amtUSD = Number(amountUSD);
+    if (!Number.isFinite(amtUSD) || amtUSD < MANUAL_ADJUSTMENT_MIN_USD) {
       return sendBadRequestResponse(
         res,
-        `Amount must be at least $${MANUAL_ADJUSTMENT_MIN}`
+        `Amount must be at least $${MANUAL_ADJUSTMENT_MIN_USD}`
       );
     }
-    if (amt > MANUAL_ADJUSTMENT_MAX) {
+    if (amtUSD > MANUAL_ADJUSTMENT_MAX_USD) {
       return sendBadRequestResponse(
         res,
-        `Amount exceeds maximum ($${MANUAL_ADJUSTMENT_MAX.toLocaleString()})`
+        `Amount exceeds maximum ($${MANUAL_ADJUSTMENT_MAX_USD.toLocaleString()})`
       );
     }
 
@@ -306,12 +327,41 @@ const manualCredit = async (req, res) => {
       return sendBadRequestResponse(res, 'Cannot credit a banned user');
     }
 
-    // ─── Apply balance change ───
-    const balanceBefore = Number(user.balances?.USD || 0);
-    const balanceAfter = balanceBefore + amt;
+    // ─── Verify currency is supported (has active SystemWallet) ───
+    const sysQuery = { currency: currencyUpper, isActive: true };
+    if (network) sysQuery.network = String(network).trim();
 
-    user.balances.USD = balanceAfter;
-    user.totalDeposits = (user.totalDeposits || 0) + amt;
+    const systemWallet = await SystemWallet.findOne(sysQuery);
+    if (!systemWallet) {
+      return sendBadRequestResponse(
+        res,
+        `${currencyUpper}${network ? ' on ' + network : ''} is not available`
+      );
+    }
+
+    const resolvedNetwork = systemWallet.network;
+
+    // ─── Convert USD → crypto using live price ───
+    let conversion;
+    try {
+      conversion = await usdToCrypto(amtUSD, currencyUpper);
+    } catch (err) {
+      return sendBadRequestResponse(
+        res,
+        `Unable to fetch current ${currencyUpper} price. Please try again.`
+      );
+    }
+
+    // ─── Compute new balances ───
+    const balanceBeforeUSD = Number(user.balances?.USD || 0);
+    const balanceBeforeCoin = Number(user.balances?.[currencyUpper] || 0);
+    const balanceAfterUSD = balanceBeforeUSD + conversion.amountUSD;
+    const balanceAfterCoin = balanceBeforeCoin + conversion.amountCrypto;
+
+    user.balances.USD = balanceAfterUSD;
+    user.balances[currencyUpper] = balanceAfterCoin;
+    user.totalDeposits = (user.totalDeposits || 0) + conversion.amountUSD;
+    user.markModified('balances'); // ensure nested object is saved
     await user.save();
 
     // ─── Create transaction ───
@@ -320,40 +370,46 @@ const manualCredit = async (req, res) => {
     const transaction = await Transaction.create({
       user: user._id,
       type: 'deposit',
-      currency: 'USD',
-      amount: amt,
-      amountCrypto: 0,
-      balanceAfter,
+      direction: 'credit',
+      currency: currencyUpper,
+      amount: conversion.amountUSD,
+      amountCrypto: conversion.amountCrypto,
+      balanceAfter: balanceAfterUSD,
       status: 'completed',
       reference,
-      description: `Manual credit by admin`,
+      description: `Manual ${currencyUpper} credit by admin`,
       completedAt: new Date(),
       metadata: {
         manual: true,
         adminId: req.user.userId,
         adminName: req.user.name || 'admin',
         reason: trimmedReason,
-        balanceBefore,
-        balanceAfter,
+        network: resolvedNetwork,
+        balanceBeforeUSD,
+        balanceAfterUSD,
+        balanceBeforeCoin,
+        balanceAfterCoin,
+        priceAtCredit: conversion.price,
+        priceSource: conversion.source,
       },
     });
 
-    // ─── Send email (best-effort) ───
-    if (sendEmail) {
-      sendTransactionEmail(user, {
-        type: 'Account Credit',
-        amount: amt,
-        crypto: 'USD',
-        status: 'Completed',
-        reference,
-      }).catch((err) =>
-        console.error('Manual credit email error:', err.message)
-      );
-    }
+    // ─── Send email ───
+    // if (sendEmail) {
+    //   sendTransactionEmail(user, {
+    //     type: 'Account Credit',
+    //     amount: conversion.amountCrypto,
+    //     crypto: currencyUpper,
+    //     status: 'Completed',
+    //     reference,
+    //   }).catch((err) =>
+    //     console.error('Manual credit email error:', err.message)
+    //   );
+    // }
 
     return sendSuccessResponseData(
       res,
-      `$${amt.toFixed(2)} credited to ${user.name}`,
+      `$${conversion.amountUSD.toFixed(2)} (${conversion.amountCrypto} ${currencyUpper}) credited to ${user.name}`,
       {
         user: {
           _id: user._id,
@@ -365,11 +421,17 @@ const manualCredit = async (req, res) => {
         transaction: {
           _id: transaction._id,
           reference: transaction.reference,
-          amount: transaction.amount,
-          balanceAfter: transaction.balanceAfter,
+          currency: currencyUpper,
+          network: resolvedNetwork,
+          amount: conversion.amountUSD,
+          amountCrypto: conversion.amountCrypto,
+          balanceAfter: balanceAfterUSD,
         },
-        balanceBefore,
-        balanceAfter,
+        balanceBeforeUSD,
+        balanceAfterUSD,
+        balanceBeforeCoin,
+        balanceAfterCoin,
+        price: conversion.price,
       },
       200
     );
@@ -381,34 +443,54 @@ const manualCredit = async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| MANUAL DEBIT (admin debits a user's USD balance)
+| MANUAL DEBIT (admin debits a user's balance in a specific currency)
 |--------------------------------------------------------------------------
-| Body: { amount: number, reason: string, sendEmail?: boolean }
-| Fails if user's balance would go negative.
+| Body: {
+|   currency: 'BTC' | 'ETH' | ... ,
+|   network?: string,
+|   amountUSD: number,
+|   reason: string,
+|   sendEmail?: boolean
+| }
+|
+| Debits BOTH balances.USD and balances[currency].
+| Fails if user's USD balance OR coin balance would go negative.
 |--------------------------------------------------------------------------
 */
 const manualDebit = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { amount, reason, sendEmail = true } = req.body;
+    const {
+      currency,
+      network,
+      amountUSD,
+      reason,
+      sendEmail = true,
+    } = req.body;
 
     // ─── Validate user ID ───
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return sendNotFoundResponse(res, 'User not found');
     }
 
+    // ─── Validate currency ───
+    if (!currency) {
+      return sendBadRequestResponse(res, 'Currency is required');
+    }
+    const currencyUpper = String(currency).toUpperCase().trim();
+
     // ─── Validate amount ───
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt < MANUAL_ADJUSTMENT_MIN) {
+    const amtUSD = Number(amountUSD);
+    if (!Number.isFinite(amtUSD) || amtUSD < MANUAL_ADJUSTMENT_MIN_USD) {
       return sendBadRequestResponse(
         res,
-        `Amount must be at least $${MANUAL_ADJUSTMENT_MIN}`
+        `Amount must be at least $${MANUAL_ADJUSTMENT_MIN_USD}`
       );
     }
-    if (amt > MANUAL_ADJUSTMENT_MAX) {
+    if (amtUSD > MANUAL_ADJUSTMENT_MAX_USD) {
       return sendBadRequestResponse(
         res,
-        `Amount exceeds maximum ($${MANUAL_ADJUSTMENT_MAX.toLocaleString()})`
+        `Amount exceeds maximum ($${MANUAL_ADJUSTMENT_MAX_USD.toLocaleString()})`
       );
     }
 
@@ -434,20 +516,56 @@ const manualDebit = async (req, res) => {
       return sendBadRequestResponse(res, 'Cannot debit a banned user');
     }
 
-    // ─── Check sufficient balance ───
-    const balanceBefore = Number(user.balances?.USD || 0);
-    if (amt > balanceBefore) {
+    // ─── Verify currency is supported ───
+    const sysQuery = { currency: currencyUpper, isActive: true };
+    if (network) sysQuery.network = String(network).trim();
+
+    const systemWallet = await SystemWallet.findOne(sysQuery);
+    if (!systemWallet) {
       return sendBadRequestResponse(
         res,
-        `Insufficient balance. User has $${balanceBefore.toFixed(2)}, tried to debit $${amt.toFixed(2)}`
+        `${currencyUpper}${network ? ' on ' + network : ''} is not available`
       );
     }
 
-    // ─── Apply balance change ───
-    const balanceAfter = balanceBefore - amt;
+    const resolvedNetwork = systemWallet.network;
 
-    user.balances.USD = balanceAfter;
-    user.totalWithdrawals = (user.totalWithdrawals || 0) + amt;
+    // ─── Convert USD → crypto using live price ───
+    let conversion;
+    try {
+      conversion = await usdToCrypto(amtUSD, currencyUpper);
+    } catch (err) {
+      return sendBadRequestResponse(
+        res,
+        `Unable to fetch current ${currencyUpper} price. Please try again.`
+      );
+    }
+
+    // ─── Check BOTH balances ───
+    const balanceBeforeUSD = Number(user.balances?.USD || 0);
+    const balanceBeforeCoin = Number(user.balances?.[currencyUpper] || 0);
+
+    if (conversion.amountUSD > balanceBeforeUSD) {
+      return sendBadRequestResponse(
+        res,
+        `Insufficient USD balance. User has $${balanceBeforeUSD.toFixed(2)}, tried to debit $${conversion.amountUSD.toFixed(2)}`
+      );
+    }
+    if (conversion.amountCrypto > balanceBeforeCoin) {
+      return sendBadRequestResponse(
+        res,
+        `Insufficient ${currencyUpper} balance. User has ${balanceBeforeCoin} ${currencyUpper}, tried to debit ${conversion.amountCrypto} ${currencyUpper}`
+      );
+    }
+
+    // ─── Apply ───
+    const balanceAfterUSD = balanceBeforeUSD - conversion.amountUSD;
+    const balanceAfterCoin = balanceBeforeCoin - conversion.amountCrypto;
+
+    user.balances.USD = balanceAfterUSD;
+    user.balances[currencyUpper] = balanceAfterCoin;
+    user.totalWithdrawals = (user.totalWithdrawals || 0) + conversion.amountUSD;
+    user.markModified('balances');
     await user.save();
 
     // ─── Create transaction ───
@@ -456,40 +574,46 @@ const manualDebit = async (req, res) => {
     const transaction = await Transaction.create({
       user: user._id,
       type: 'withdrawal',
-      currency: 'USD',
-      amount: amt,
-      amountCrypto: 0,
-      balanceAfter,
+      direction: 'debit',
+      currency: currencyUpper,
+      amount: conversion.amountUSD,
+      amountCrypto: conversion.amountCrypto,
+      balanceAfter: balanceAfterUSD,
       status: 'completed',
       reference,
-      description: `Manual debit by admin`,
+      description: `Manual ${currencyUpper} debit by admin`,
       completedAt: new Date(),
       metadata: {
         manual: true,
         adminId: req.user.userId,
         adminName: req.user.name || 'admin',
         reason: trimmedReason,
-        balanceBefore,
-        balanceAfter,
+        network: resolvedNetwork,
+        balanceBeforeUSD,
+        balanceAfterUSD,
+        balanceBeforeCoin,
+        balanceAfterCoin,
+        priceAtDebit: conversion.price,
+        priceSource: conversion.source,
       },
     });
 
-    // ─── Send email (best-effort) ───
-    if (sendEmail) {
-      sendTransactionEmail(user, {
-        type: 'Account Debit',
-        amount: amt,
-        crypto: 'USD',
-        status: 'Completed',
-        reference,
-      }).catch((err) =>
-        console.error('Manual debit email error:', err.message)
-      );
-    }
+    // ─── Send email ───
+    // if (sendEmail) {
+    //   sendTransactionEmail(user, {
+    //     type: 'Account Debit',
+    //     amount: conversion.amountCrypto,
+    //     crypto: currencyUpper,
+    //     status: 'Completed',
+    //     reference,
+    //   }).catch((err) =>
+    //     console.error('Manual debit email error:', err.message)
+    //   );
+    // }
 
     return sendSuccessResponseData(
       res,
-      `$${amt.toFixed(2)} debited from ${user.name}`,
+      `$${conversion.amountUSD.toFixed(2)} (${conversion.amountCrypto} ${currencyUpper}) debited from ${user.name}`,
       {
         user: {
           _id: user._id,
@@ -501,11 +625,17 @@ const manualDebit = async (req, res) => {
         transaction: {
           _id: transaction._id,
           reference: transaction.reference,
-          amount: transaction.amount,
-          balanceAfter: transaction.balanceAfter,
+          currency: currencyUpper,
+          network: resolvedNetwork,
+          amount: conversion.amountUSD,
+          amountCrypto: conversion.amountCrypto,
+          balanceAfter: balanceAfterUSD,
         },
-        balanceBefore,
-        balanceAfter,
+        balanceBeforeUSD,
+        balanceAfterUSD,
+        balanceBeforeCoin,
+        balanceAfterCoin,
+        price: conversion.price,
       },
       200
     );
